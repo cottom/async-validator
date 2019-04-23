@@ -1,4 +1,14 @@
-import { format, complementError, asyncMap, warning, deepMerge, convertFieldsError } from './util';
+import {
+  set,
+  get,
+  clone,
+  format,
+  complementError,
+  asyncMap,
+  warning,
+  deepMerge,
+  convertFieldsError,
+} from './util';
 import validators from './validator/';
 import { messages as defaultMessages, newMessages } from './messages';
 
@@ -94,14 +104,16 @@ Schema.prototype = {
     const keys = options.keys || Object.keys(this.rules);
     keys.forEach((z) => {
       arr = this.rules[z];
-      value = source[z];
+      value = get(source, z);
+      // value = source[z];
       arr.forEach((r) => {
         let rule = r;
         if (typeof (rule.transform) === 'function') {
           if (source === source_) {
-            source = { ...source };
+            source = clone(source);
           }
-          value = source[z] = rule.transform(value);
+          value = rule.transform(value);
+          set(source, z, value);
         }
         if (typeof (rule) === 'function') {
           rule = {
@@ -140,93 +152,93 @@ Schema.prototype = {
         };
       }
 
-      function cb(e = []) {
-        let errors = e;
-        if (!Array.isArray(errors)) {
-          errors = [errors];
-        }
-        if (errors.length) {
-          Schema.warning('async-validator:', errors);
-        }
-        if (errors.length && rule.message) {
-          errors = [].concat(rule.message);
-        }
+        function cb(e = []) {
+          let errors = e;
+          if (!Array.isArray(errors)) {
+            errors = [errors];
+          }
+          if (errors.length) {
+            Schema.warning('async-validator:', errors);
+          }
+          if (errors.length && rule.message) {
+            errors = [].concat(rule.message);
+          }
 
-        errors = errors.map(complementError(rule));
+          errors = errors.map(complementError(rule));
 
-        if (options.first && errors.length) {
-          errorFields[rule.field] = 1;
-          return doIt(errors);
-        }
-        if (!deep) {
-          doIt(errors);
-        } else {
-          // if rule is required but the target object
-          // does not exist fail at the rule level and don't
-          // go deeper
-          if (rule.required && !data.value) {
-            if (rule.message) {
-              errors = [].concat(rule.message).map(complementError(rule));
-            } else if (options.error) {
-              errors = [options.error(rule, format(options.messages.required, rule.field))];
-            } else {
-              errors = [];
-            }
+          if (options.first && errors.length) {
+            errorFields[rule.field] = 1;
             return doIt(errors);
           }
+          if (!deep) {
+            doIt(errors);
+          } else {
+            // if rule is required but the target object
+            // does not exist fail at the rule level and don't
+            // go deeper
+            if (rule.required && !data.value) {
+              if (rule.message) {
+                errors = [].concat(rule.message).map(complementError(rule));
+              } else if (options.error) {
+                errors = [options.error(rule, format(options.messages.required, rule.field))];
+              } else {
+                errors = [];
+              }
+              return doIt(errors);
+            }
 
-          let fieldsSchema = {};
-          if (rule.defaultField) {
-            for (const k in data.value) {
-              if (data.value.hasOwnProperty(k)) {
-                fieldsSchema[k] = rule.defaultField;
+            let fieldsSchema = {};
+            if (rule.defaultField) {
+              for (const k in data.value) {
+                if (data.value.hasOwnProperty(k)) {
+                  fieldsSchema[k] = rule.defaultField;
+                }
               }
             }
-          }
-          fieldsSchema = {
-            ...fieldsSchema,
-            ...data.rule.fields,
-          };
-          for (const f in fieldsSchema) {
-            if (fieldsSchema.hasOwnProperty(f)) {
-              const fieldSchema = Array.isArray(fieldsSchema[f]) ?
+            fieldsSchema = {
+              ...fieldsSchema,
+              ...data.rule.fields,
+            };
+            for (const f in fieldsSchema) {
+              if (fieldsSchema.hasOwnProperty(f)) {
+                const fieldSchema = Array.isArray(fieldsSchema[f]) ?
                 fieldsSchema[f] : [fieldsSchema[f]];
-              fieldsSchema[f] = fieldSchema.map(addFullfield.bind(null, f));
+                fieldsSchema[f] = fieldSchema.map(addFullfield.bind(null, f));
+              }
             }
+            const schema = new Schema(fieldsSchema);
+            schema.messages(options.messages);
+            if (data.rule.options) {
+              data.rule.options.messages = options.messages;
+              data.rule.options.error = options.error;
+            }
+            schema.validate(data.value, data.rule.options || options, (errs) => {
+              doIt(errs && errs.length ? errors.concat(errs) : errs);
+            });
           }
-          const schema = new Schema(fieldsSchema);
-          schema.messages(options.messages);
-          if (data.rule.options) {
-            data.rule.options.messages = options.messages;
-            data.rule.options.error = options.error;
-          }
-          schema.validate(data.value, data.rule.options || options, (errs) => {
-            doIt(errs && errs.length ? errors.concat(errs) : errs);
-          });
         }
-      }
 
-      let res;
-      if (rule.asyncValidator) {
-        res = rule.asyncValidator(rule, data.value, cb, data.source, options);
-      } else if (rule.validator) {
-        res = rule.validator(rule, data.value, cb, data.source, options);
-        if (res === true) {
-          cb();
-        } else if (res === false) {
-          cb(rule.message || `${rule.field} fails`);
-        } else if (res instanceof Array) {
-          cb(res);
-        } else if (res instanceof Error) {
-          cb(res.message);
+        let res;
+        if (rule.asyncValidator) {
+          res = rule.asyncValidator(rule, data.value, cb, data.source, options);
+        } else if (rule.validator) {
+          res = rule.validator(rule, data.value, cb, data.source, options);
+          if (res === true) {
+            cb();
+          } else if (res === false) {
+            cb(rule.message || `${rule.field} fails`);
+          } else if (res instanceof Array) {
+            cb(res);
+          } else if (res instanceof Error) {
+            cb(res.message);
+          }
         }
-      }
-      if (res && res.then) {
-        res.then(() => cb(), e => cb(e));
-      }
-    }, (results) => {
-      complete(results);
-    });
+        if (res && res.then) {
+          res.then(() => cb(), e => cb(e));
+        }
+      }, (results) => {
+        complete(results);
+      });
   },
   getType(rule) {
     if (rule.type === undefined && (rule.pattern instanceof RegExp)) {

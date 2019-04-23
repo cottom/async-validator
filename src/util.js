@@ -208,3 +208,86 @@ export function deepMerge(target, source) {
   }
   return target;
 }
+
+//  https://github.com/lodash/lodash/blob/master/.internal/stringToPath.js
+const charCodeOfDot = '.'.charCodeAt(0);
+const reEscapeChar = /\\(\\)?/g;
+const rePropName = RegExp(
+  // Match anything that isn't a dot or bracket.
+  '[^.[\\]]+' + '|' +
+  // Or match property names within brackets.
+  '\\[(?:' +
+    // Match a non-string expression.
+    '([^"\'].*)' + '|' +
+    // Or match strings (supports escaping characters).
+    '(["\'])((?:(?!\\2)[^\\\\]|\\\\.)*?)\\2' +
+  ')\\]' + '|' +
+  // Or match "" as the space between consecutive dots or empty brackets.
+  '(?=(?:\\.|\\[\\])(?:\\.|\\[\\]|$))'
+, 'g');
+
+const strToPath = string => {
+  const result = [];
+  if (string.charCodeAt(0) === charCodeOfDot) {
+    result.push('');
+  }
+  string.replace(rePropName, (match, expression, quote, subString) => {
+    let key = match;
+    if (quote) {
+      key = subString.replace(reEscapeChar, '$1');
+    } else if (expression) {
+      key = expression.trim();
+    }
+    result.push(key);
+  });
+  return result;
+};
+
+export function get(obj, key, defaultValue) {
+  if (obj === null || typeof obj === 'undefined') {
+    return defaultValue;
+  }
+
+  const path = strToPath(key);
+  let acc = obj;
+  for (let i = 0; i < path.length; i++) {
+    const keyName = path[i];
+    if (typeof acc === 'undefined' || acc === null) {
+      return acc;
+    }
+    if (keyName) {
+      acc = acc[keyName];
+    }
+  }
+  return acc;
+}
+
+export function set(obj, key, v) {
+  if (obj && typeof obj === 'object') {
+    const path = strToPath(key).filter(Boolean);
+    let acc = obj;
+    for (let i = 0; i < path.length - 1; i++) {
+      const keyName = path[i];
+      if (keyName) {
+        acc[keyName] = acc[keyName] && typeof acc[keyName] === 'object' ? acc[keyName] : {};
+        acc = acc[keyName];
+      }
+    }
+    acc[path[path.length]] = v;
+  }
+}
+
+export function clone(obj, cache = []) {
+  if (obj === null || typeof obj !== 'object') return obj;
+  const hit = cache.filter(item => item.origin === obj)[0];
+  if (hit) return hit;
+  const copy = Array.isArray(obj) ? [] : {};
+  cache.push({
+    origin: obj,
+    copy,
+  });
+  Object.keys(obj).forEach(key => {
+    copy[key] = clone(obj[key], cache);
+  });
+  return copy;
+}

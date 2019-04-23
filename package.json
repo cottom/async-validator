@@ -1,17 +1,17 @@
 {
-  "name": "async-validator",
-  "version": "1.11.1",
+  "name": "async-validator-patch",
+  "version": "0.1.3",
   "description": "validate form asynchronous",
   "keywords": [
     "validator",
     "validate",
     "async"
   ],
-  "homepage": "http://github.com/yiminghe/async-validator",
+  "homepage": "http://github.com/cottom/async-validator",
   "author": "yiminghe@gmail.com",
   "repository": {
     "type": "git",
-    "url": "git@github.com:yiminghe/async-validator.git"
+    "url": "git@github.com:cottom/async-validator.git"
   },
   "files": [
     "lib",
@@ -28,7 +28,6 @@
     }
   },
   "bugs": {
-    "url": "http://github.com/yiminghe/async-validator/issues"
   },
   "licenses": "MIT",
   "config": {
@@ -40,6 +39,7 @@
     "start": "rc-tools run server",
     "pub": "rc-tools run pub --babel-runtime",
     "lint": "rc-tools run lint",
+    "compile": "rc-tools run compile",
     "test": "jest",
     "coverage": "jest --coverage && cat ./coverage/lcov.info | coveralls"
   },
